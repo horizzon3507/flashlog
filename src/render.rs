@@ -1,8 +1,5 @@
 use crate::detector::Kind;
 
-/// How long a new match blinks (ms) before settling as steady inverted text.
-pub const BLINK_MS: u64 = 1500;
-
 /// Render one suspicious line: resolved darkness. Blink would flicker per-print,
 /// so we flash with a strong marker on arrival and keep it inverse-bold after.
 pub fn flash(line: &str, kind: Kind) -> String {
