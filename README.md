@@ -20,7 +20,7 @@ flashlog reads text from standard input one line at a time. Ordinary lines pass 
 ## Options
 
 - `--only` prints only suspicious lines.
-- `--json` emits suspicious lines as JSON objects with `kind` and `line` fields. Ordinary lines are omitted.
+- `--json` emits suspicious lines as JSON objects with `kind`, `line`, `file`, and `line_number` fields. Ordinary lines are omitted.
 - `-h` or `--help` prints usage.
 
 For example, to inspect only matching lines from today's journal:
@@ -60,3 +60,19 @@ cargo test
 ```
 
 flashlog is written in Rust, has no runtime service, and uses one dependency (`regex`). All filtering happens locally; input is not sent over the network.
+
+## Filtering and output controls
+
+- `--color auto|always|never` controls color. `auto` colors only terminal output, and `NO_COLOR` disables it unless `--color always` is set.
+- `--levels fatal,secret,error,trace` includes only listed categories. `--exclude error,trace` removes selected categories.
+- `--context N` includes up to N lines before and after each match. Overlapping windows are printed once.
+- `--summary` writes totals and per-category match counts to standard error.
+- Pass one or more file paths to inspect them directly. Use `-` as a file name to read standard input; with no paths, flashlog reads standard input automatically.
+
+File output includes the source path and line number. JSON output contains `kind`, `line`, `file`, and `line_number`; `file` is `null` for standard input. JSON output only includes matching lines, including when `--context` is used.
+
+```bash
+flashlog --only --context 2 app.log
+flashlog --levels fatal,secret --summary app.log
+journalctl -f | flashlog --color never
+```

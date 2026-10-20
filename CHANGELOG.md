@@ -11,11 +11,11 @@ The installable surface is **CLI** (`flashlog`). Other apps swap in their own na
 
 | Part | What you install | Example |
 | --- | --- | --- |
-| **CLI** | `flashlog` in the terminal | `v0.1.0-stable` |
+| **CLI** | `flashlog` in the terminal | `v0.1.1-stable` |
 
 With one surface there is no `m` in the tag and no per-surface sections — just the version notes.
 
-Each release heading is the version and date (`## v0.1.0-stable · 19/10/2026`); under it, a short summary ends with a plain sentence like: “This version was made for CLI with a stable release channel on 19/10/2026 (v0.1.0-stable).”
+Each release heading is the version and date (`## v0.1.1-stable · 19/10/2026`); under it, a short summary ends with a plain sentence like: “This version was made for CLI with a stable release channel on 19/10/2026 (v0.1.1-stable).”
 
 ### What the channel suffix means
 
@@ -28,6 +28,18 @@ Each release heading is the version and date (`## v0.1.0-stable · 19/10/2026`);
 We only call something **stable** when we mean it.
 
 </details>
+
+## v0.1.1-stable · 19/10/2026
+
+Adds direct file inspection, output controls, and context around matches. This version was made for CLI with a stable release channel on 19/10/2026 (v0.1.1-stable).
+
+- Read one or more files directly, or stdin with `-`; include file paths and line numbers in matching output.
+- Emit valid JSON records with category, source, and line number fields.
+- Control terminal colors with `--color auto|always|never`, respecting `NO_COLOR` in automatic mode.
+- Filter categories with `--levels` and `--exclude`, include nearby lines with `--context`, and print per-category counts with `--summary`.
+- Report invalid options and input errors with useful messages and appropriate exit statuses.
+- Expand detection for common token families, warnings, and fatal memory failures.
+- Add unit and CLI integration coverage for argument parsing, output, filtering, context, and file handling.
 
 ## v0.1.0-stable · 19/10/2026
 
