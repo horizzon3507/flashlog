@@ -2,6 +2,10 @@
 name = "flashlog"
 version = "0.1.0"
 edition = "2021"
+description = "Highlight errors, secrets, and stack traces in terminal output"
+license = "MIT"
+readme = "README.md"
+repository = "https://github.com/horizzon3507/flashlog"
 
 [dependencies]
 regex = "1"
