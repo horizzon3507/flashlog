@@ -11,11 +11,11 @@ The installable surface is **CLI** (`flashlog`). Other apps swap in their own na
 
 | Part | What you install | Example |
 | --- | --- | --- |
-| **CLI** | `flashlog` in the terminal | `v0.1.1-stable` |
+| **CLI** | `flashlog` in the terminal | `v0.1.2-stable` |
 
 With one surface there is no `m` in the tag and no per-surface sections — just the version notes.
 
-Each release heading is the version and date (`## v0.1.1-stable · 19/10/2026`); under it, a short summary ends with a plain sentence like: “This version was made for CLI with a stable release channel on 19/10/2026 (v0.1.1-stable).”
+Each release heading is the version and date (`## v0.1.2-stable · 04/11/2026`); under it, a short summary ends with a plain sentence like: “This version was made for CLI with a stable release channel on 04/11/2026 (v0.1.2-stable).”
 
 ### What the channel suffix means
 
@@ -28,6 +28,12 @@ Each release heading is the version and date (`## v0.1.1-stable · 19/10/2026`);
 We only call something **stable** when we mean it.
 
 </details>
+
+## v0.1.2-stable · 04/11/2026
+
+Relicensed the project under Apache-2.0. This version was made for CLI with a stable release channel on 04/11/2026 (v0.1.2-stable).
+
+- Replaced the MIT license with Apache License 2.0 and updated the crate `license` field to `Apache-2.0`.
 
 ## v0.1.1-stable · 19/10/2026
 
