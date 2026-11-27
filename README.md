@@ -12,10 +12,10 @@ flashlog reads text from standard input one line at a time. Ordinary lines pass 
 
 ## What it detects
 
-- **FATAL** — panics, segmentation faults, and core dumps
+- **FATAL** — panics, segmentation faults, core dumps, OOM kills, and `CRITICAL` records
 - **SECRET** — AWS keys, common `sk-…`, `ghp_…` and Slack tokens, bearer credentials, plaintext password fields, and private key headers
-- **error** — common error words, non-zero exit status, and build failures
-- **trace** — common stack trace frames and source file locations
+- **error** — common error words, uppercase `WARN`/`WARNING`/`FAILED` verdicts, exception-class lines (`ValueError: …`), non-zero exit status, build failures, common runtime failures (`connection refused`, `permission denied`, `no space left on device`, …), and HTTP 5xx statuses
+- **trace** — stack frames and traceback headers from Rust, Python, JavaScript/TypeScript, Java, and Go, plus source file locations (`file.rs:42:9`)
 
 ## Options
 
