@@ -177,3 +177,29 @@ fn color_auto_respects_no_color_for_terminal_independent_rendering() {
     let output = child.wait_with_output().unwrap();
     assert!(!String::from_utf8(output.stdout).unwrap().contains("\x1b"));
 }
+
+#[test]
+fn json_handles_unicode_backspace_and_formfeed() {
+    let output = run("error: acentuação çãõ\x08\x0c fim\n", &["--json"]);
+    let text = String::from_utf8(output.stdout).unwrap();
+    let value: serde_json::Value = serde_json::from_str(text.trim()).unwrap();
+    assert_eq!(value["line"], "error: acentuação çãõ\u{8}\u{c} fim");
+}
+
+#[test]
+fn crlf_line_endings_are_normalized_like_lines() {
+    let output = run("error: a\r\nplain b\r\n", &["--color", "never"]);
+    assert_eq!(
+        String::from_utf8(output.stdout).unwrap(),
+        "✗ error error: a\nplain b\n"
+    );
+}
+
+#[test]
+fn multibyte_utf8_lines_pass_through_untouched() {
+    let output = run("jóia rara ✓\nerror: falhão ç\n", &["--only", "--color", "never"]);
+    assert_eq!(
+        String::from_utf8(output.stdout).unwrap(),
+        "✗ error error: falhão ç\n"
+    );
+}

@@ -15,7 +15,19 @@ The installable surface is **CLI** (`flashlog`). Other apps swap in their own na
 
 With one surface there is no `m` in the tag and no per-surface sections — just the version notes.
 
-Each release heading is the version and date (`## v0.1.2-stable · 04/11/2026`); under it, a short summary ends with a plain sentence like: “This version was made for CLI with a stable release channel on 04/11/2026 (v0.1.2-stable).”
+Each release heading is the version and date (`## v0.2.0-stable · 26/11/2026
+
+Much faster scanning, broader error detection, and a smaller binary. This version was made for CLI with a stable release channel on 26/11/2026 (v0.2.0-stable).
+
+- Compiled every detection rule into one `regex::RegexSet`, so each line is scanned once instead of once per rule. On a 500,000-line mixed log (33 MB) the same modes run in ~195 ms instead of ~335 ms on the maintainer's machine.
+- Reworked `--only --context N` from "load the whole file, then filter" into a streaming sliding window: peak memory on a 330 MB log dropped from ~501 MB to ~9 MB, and input size no longer bounds memory.
+- Switched line reading to buffer-borrowing scanning, removing one allocation per line, and write output directly without intermediate strings.
+- Removed the runtime `serde`/`serde_json` dependency: JSON output is written directly with correct escaping. `serde_json` stays as a dev-dependency for tests.
+- Trimmed release dependencies and profile (`regex` without its unused Unicode tables and engines, fat LTO, `opt-level = "z"`, one codegen unit, abort on panic, stripped symbols): the release binary went from 1,889,048 to 1,194,776 bytes (~37% smaller).
+- Detection now also catches `CRITICAL` log records, `segfault`, Go `panic:` lines, Python `File "...", line N` frames and exception-class lines (`ValueError: ...`), Java `at com.example.Foo.bar(Foo.java:N)` frames, `Caused by:` chains, Go `goroutine N [...]:` dumps, Rust short backtrace frames (`  0: std::...`), uppercase `WARN`/`WARNING`/`FAILED` verdicts, `connection refused`, `permission denied`, `no space left on device`, `cannot allocate memory`, `too many open files`, HTTP 5xx statuses, and `.java`/`.rb`/`.cs` source locations.
+- Lines with invalid UTF-8 are now inspected with lossy decoding instead of aborting the run.
+
+## v0.1.2-stable · 04/11/2026`); under it, a short summary ends with a plain sentence like: “This version was made for CLI with a stable release channel on 04/11/2026 (v0.1.2-stable).”
 
 ### What the channel suffix means
 

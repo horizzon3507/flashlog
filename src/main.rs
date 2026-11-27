@@ -1,21 +1,12 @@
 mod args;
 mod detector;
 mod render;
-mod stream;
 
 use args::{Args, Level};
 use detector::Kind;
-use serde::Serialize;
-use std::io::{self, BufWriter, Write};
+use std::collections::VecDeque;
+use std::io::{self, BufRead, BufWriter, Write};
 use std::process::exit;
-
-#[derive(Serialize)]
-struct JsonLine<'a> {
-    kind: &'static str,
-    line: &'a str,
-    file: Option<&'a str>,
-    line_number: usize,
-}
 
 #[derive(Default)]
 struct Counts {
@@ -78,7 +69,7 @@ fn run(args: &Args) -> io::Result<()> {
         is_terminal,
         std::env::var_os("NO_COLOR").is_some(),
     );
-    let mut out = BufWriter::new(stdout.lock());
+    let mut out = BufWriter::with_capacity(64 * 1024, stdout.lock());
     let files = if args.files.is_empty() {
         vec![std::path::PathBuf::from("-")]
     } else {
@@ -94,7 +85,7 @@ fn run(args: &Args) -> io::Result<()> {
                 io::Error::new(error.kind(), format!("{}: {error}", path.display()))
             })?;
             process_reader(
-                io::BufReader::new(file),
+                io::BufReader::with_capacity(64 * 1024, file),
                 Some(path.display().to_string()),
                 args,
                 color,
@@ -131,7 +122,65 @@ fn allowed(kind: Kind, args: &Args) -> bool {
         && !args.exclude.contains(&level)
 }
 
-fn process_reader<R: io::BufRead, W: Write>(
+/// Streams newline-delimited chunks out of a buffered reader without one
+/// allocation per line: lines that fit in the reader's buffer are borrowed
+/// directly, and only lines spanning a buffer refill touch the carry buffer.
+struct LineScanner<R> {
+    reader: R,
+    carry: Vec<u8>,
+}
+
+impl<R: BufRead> LineScanner<R> {
+    fn new(reader: R) -> Self {
+        Self {
+            reader,
+            carry: Vec::new(),
+        }
+    }
+
+    fn for_each_line(&mut self, mut f: impl FnMut(&[u8]) -> io::Result<()>) -> io::Result<()> {
+        loop {
+            let buf = self.reader.fill_buf()?;
+            if buf.is_empty() {
+                if !self.carry.is_empty() {
+                    let carry = std::mem::take(&mut self.carry);
+                    f(trim_cr(&carry))?;
+                }
+                return Ok(());
+            }
+            match buf.iter().position(|&byte| byte == b'\n') {
+                Some(pos) => {
+                    if self.carry.is_empty() {
+                        f(trim_cr(&buf[..pos]))?;
+                    } else {
+                        self.carry.extend_from_slice(&buf[..pos]);
+                        let carry = std::mem::take(&mut self.carry);
+                        f(trim_cr(&carry))?;
+                    }
+                    self.reader.consume(pos + 1);
+                }
+                None => {
+                    let len = buf.len();
+                    self.carry.extend_from_slice(buf);
+                    self.reader.consume(len);
+                }
+            }
+        }
+    }
+}
+
+fn trim_cr(line: &[u8]) -> &[u8] {
+    line.strip_suffix(b"\r").unwrap_or(line)
+}
+
+fn inspect_bytes(line: &[u8]) -> Option<Kind> {
+    match std::str::from_utf8(line) {
+        Ok(text) => detector::inspect(text),
+        Err(_) => detector::inspect(&String::from_utf8_lossy(line)),
+    }
+}
+
+fn process_reader<R: BufRead, W: Write>(
     reader: R,
     file: Option<String>,
     args: &Args,
@@ -139,78 +188,72 @@ fn process_reader<R: io::BufRead, W: Write>(
     counts: &mut Counts,
     out: &mut W,
 ) -> io::Result<()> {
-    if args.context == 0 {
-        for (index, line) in reader.lines().enumerate() {
-            let line = line?;
-            let raw_kind = detector::inspect(&line);
-            counts.add(raw_kind);
-            let kind = raw_kind.filter(|kind| allowed(*kind, args));
-            let line_number = index + 1;
-            if args.json {
-                if let Some(kind) = kind {
-                    let value = JsonLine {
-                        kind: kind.as_str(),
-                        line: &line,
-                        file: file.as_deref(),
-                        line_number,
-                    };
-                    serde_json::to_writer(&mut *out, &value)?;
-                    writeln!(out)?;
-                }
-            } else if let Some(kind) = kind {
-                let location = file
-                    .as_deref()
-                    .map(|name| format!("{name}:{line_number}: "))
-                    .unwrap_or_default();
-                writeln!(out, "{location}{}", render::flash(&line, kind, color))?;
-            } else if !args.only {
-                let location = file
-                    .as_deref()
-                    .map(|name| format!("{name}:{line_number}: "))
-                    .unwrap_or_default();
-                writeln!(out, "{location}{line}")?;
-            }
-        }
-        return Ok(());
-    }
+    let mut scanner = LineScanner::new(reader);
+    let mut line_number = 0usize;
+    // --only --context N sliding window: non-matching lines held back while
+    // they might still precede a match, and a countdown of trailing context
+    // lines to print after one. When --only is off, every line prints and the
+    // window is irrelevant, so it stays at zero cost.
+    let context = if args.only && !args.json { args.context } else { 0 };
+    let mut before: VecDeque<Vec<u8>> = VecDeque::new();
+    let mut after = 0usize;
 
-    let lines = reader.lines().collect::<io::Result<Vec<_>>>()?;
-    let raw_kinds: Vec<_> = lines.iter().map(|line| detector::inspect(line)).collect();
-    for kind in &raw_kinds {
-        counts.add(*kind);
-    }
-    let kinds: Vec<_> = raw_kinds
-        .into_iter()
-        .map(|kind| kind.filter(|kind| allowed(*kind, args)))
-        .collect();
-    let selected = stream::selected_lines(&kinds, args.only, args.context);
+    scanner.for_each_line(|line| {
+        line_number += 1;
+        let raw_kind = inspect_bytes(line);
+        counts.add(raw_kind);
+        let kind = raw_kind.filter(|kind| allowed(*kind, args));
 
-    for (index, (line, kind)) in lines.iter().zip(kinds.iter()).enumerate() {
-        if !selected[index] {
-            continue;
-        }
         if args.json {
             if let Some(kind) = kind {
-                let value = JsonLine {
-                    kind: kind.as_str(),
-                    line,
-                    file: file.as_deref(),
-                    line_number: index + 1,
-                };
-                serde_json::to_writer(&mut *out, &value)?;
-                writeln!(out)?;
+                render::write_json_line(out, kind, line, file.as_deref(), line_number)?;
             }
-        } else {
-            let location = file
-                .as_deref()
-                .map(|name| format!("{name}:{}: ", index + 1))
-                .unwrap_or_default();
-            if let Some(kind) = kind {
-                writeln!(out, "{location}{}", render::flash(line, *kind, color))?;
-            } else if !args.only || args.context > 0 {
-                writeln!(out, "{location}{line}")?;
+            return Ok(());
+        }
+
+        let write_location = |out: &mut W| -> io::Result<()> {
+            if let Some(name) = file.as_deref() {
+                write!(out, "{name}:{line_number}: ")?;
+            }
+            Ok(())
+        };
+
+        if !args.only {
+            write_location(out)?;
+            return render::write_line(out, line, kind, color);
+        }
+
+        if let Some(kind) = kind {
+            let mut pending_number = line_number - before.len();
+            for pending in before.drain(..) {
+                write_location_pending(out, file.as_deref(), pending_number)?;
+                render::write_line(out, &pending, None, color)?;
+                pending_number += 1;
+            }
+            write_location(out)?;
+            render::write_line(out, line, Some(kind), color)?;
+            after = context;
+        } else if after > 0 {
+            write_location(out)?;
+            render::write_line(out, line, None, color)?;
+            after -= 1;
+        } else if context > 0 {
+            before.push_back(line.to_vec());
+            if before.len() > context {
+                before.pop_front();
             }
         }
+        Ok(())
+    })
+}
+
+fn write_location_pending<W: Write>(
+    out: &mut W,
+    file: Option<&str>,
+    line_number: usize,
+) -> io::Result<()> {
+    if let Some(name) = file {
+        write!(out, "{name}:{line_number}: ")?;
     }
     Ok(())
 }
